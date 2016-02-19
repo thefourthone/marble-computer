@@ -58,9 +58,9 @@ module and (in[N],clock,read)(out[N],clk){
   }
 }
 
-#Reads numbers on in, with clock
+#Reads numbers on in
 #On read outputs out and emits clk
-module and (in[N],read)(out[N],clk){
+module or (in[N],read)(out[N],clk){
   t, delay(clk) = dup(read); 
   reset = linkt(t); # On read set state = 0, and release the marbles
   
