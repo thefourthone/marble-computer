@@ -27,3 +27,47 @@ module memory (in[N],read,rst) (out[N], clk){
     _, out[i] = switch(l[i],tmp[i]);# read switch state
   }
 }
+
+#Reads numbers on in
+#On read outputs out and emits clk
+module xor (in[N],read)(out[N],clk){
+  rst, t = dup(read);       # need 3 ouputs from read, 2 for toggling the output latch twice, and one for clk
+  rst, delay(clk) = dup(t); # delay clk so ouput has time to settle
+  
+  latch = link(flip(rst)); # makes output go to out or null
+  reset = linkt(latch);    # releases stored marbles
+  
+  for i=0-N {
+    _, catch(tmp[N]) = flip(reset,in[i]); # adder circuitry without carry
+    _, out[i] = switch(latch,tmp[i]);     # output latch
+  }
+}
+
+#Reads numbers on in, with clock
+#On read outputs out and emits clk
+module and (in[N],clock,read)(out[N],clk){
+  {src[N], delay(rst)} = dup[N+1](read); #Needs one marble per bit to read and a reset marble
+  reset = linkt(clock); # On clock set state = 0; set back to 1 if marble in catch
+  set   = linkt(rst);   # On read set state = 1;
+  
+  for i=0-N {
+    l[i] = link();
+    _, catch(tmp[i]) = switch(l[i],in[i]); # if state is 0, discard marbles, but catch marbles if 1
+    _, _ = flip(l[i]&reset&set,tmp[i]);    # When marbles released, from switch set to state 1
+    _, out[i] = switch(l,src[i])           # On read output state
+  }
+}
+
+#Reads numbers on in, with clock
+#On read outputs out and emits clk
+module and (in[N],read)(out[N],clk){
+  t, delay(clk) = dup(read); 
+  reset = linkt(t); # On read set state = 0, and release the marbles
+  
+  for i=0-N {
+    l[i] = link();
+    tmp[i], _ = switch(l[i],in[i]);                # if state is 0, send marble to flip, but discard if 1
+    _, catch(out[i]) = flip(l[i]&reset,tmp[i]);    # Set state to 1
+  }
+}
+
