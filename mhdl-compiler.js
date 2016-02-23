@@ -109,7 +109,7 @@ function parseModule(){
     error('First token in module must be a name',name);
   }
   name = name.data;
-  return {name:name,inputs:parseArglist(), outputs:parseArglist(),body:parseBlock()};
+  return {name:name,inputs:parseArgs(), outputs:parseArgs(),body:parseBlock()};
 }
 
 function parseArgs(){
@@ -192,7 +192,7 @@ function parseLH(tok){
     }
     tok = getToken();
   }
-  if(tmp){
+  if(tmp.name){
     lh.push(tmp);
   }
   if(tok.token === 'EOF'){
@@ -258,9 +258,193 @@ function parseBlock(){
   return statements;
 }
 
-var input = {src:"module adder (in[N],read) (out[N], clk){\n  rst, t = dup(read);       // need 3 ouputs from read, 2 for toggling the output latch twice, and one for clk\n  rst, delay(clk) = dup(t); // delay clk so ouput has time to settle\n  \n  latch = link(); // makes output go to out or null\n  _, _ = flip(latch,rst);\n  reset = linkt(latch);    // releases stored marbles\n  \n  for i=0 to N {\n    in[i+1], catch(tmp[N]) = flip(reset,in[i]); // adder circuitry\n    _, out[i] = switch(latch,tmp[i]);           // output latch\n  }\n}",
+var input = {src:"adder (in[N],read) (out[N], clk) {rst, t = dup(read);       // need 3 ouputs from read, 2 for toggling the output latch twice, and one for clk\n  rst, clk = dup(t); // delay clk so ouput has time to settle\n  \n  latch = link(); // makes output go to out or null\n  reset = linkt();    // releases stored marbles\n  _, _ = flip(rst,latch,reset);\n  \n  for i = 0 to N {\n    in[i+1], tmp[i] = flip(in[i],reset); // adder circuitry\n    _, out[i] = switch(tmp[i],latch);           // output latch\n  }\n}",
              i: 0,
              getIndex: function(){return input.i;},
              getChar: function(){return input.src[input.i++];},
              returnChar: function(){input.i--;}
             };
+
+function codegenStatement(statement,context){
+  if(statement.type === 'for'){
+    if(context.constants[statement.index]){
+      error('index already in use',statement);
+    }
+    var lb = context.eval(statement.lowerBound.data);
+    var ub = context.eval(statement.upperBound.data);
+    var out = [];
+    console.log(lb,ub)
+    for(var i = lb; i < ub; i++){
+      console.log(i,statement.block);
+      context.constants[statement.index] = i;
+      out = out.concat(codegenBlock(statement.block,context));
+    }
+    delete context.constants[statement.index];
+    return out;
+  }else if(statement.module === 'link' || statement.module === 'linkt'){
+    if(statement.assign.length !== 1){
+      error('links require 1 and only 1 ouput',statement);
+    }
+    if(statement.args.length !== 0){
+      error('links require 0 args',statement);
+    }
+    if(context.links[statement.assign[0]]){
+      error('cannot assign link to existing variable',statement);
+    }
+    context.setLink(statement.assign[0].name, context.newLink());
+  }else if(statement.module === 'dup' || statement.module === 'flip' || statement.module === 'switch'){
+    
+    console.log(statement);
+    if(statement.assign.length !== 2){
+      error('fundemental modules require 2 and only 2 ouput',statement);
+    }
+    var links = [];
+    for(var i = 1; i < statement.args.length; i++){
+      var name = statement.args[i].name;
+      if(statement.args[i].size){
+        name += '['+statement.args[i].size+']';
+      }
+      links.push(context.getLink(name));
+    }
+    name = statement.args[0].name
+    if(statement.args[0].size){
+      name += '['+statement.args[0].size+']';
+    }
+    var out = [];
+    out[0] = {dup:'D',flip:'F','switch':'S'}[statement.module];
+    out[1] = context.getPipe(name,true);
+    out[2] = context.getPipe(statement.assign[0].name);
+    out[3] = context.getPipe(statement.assign[1].name);
+    out[4] = links;
+    out[5] = {'catch':1,delay:2}[statement.assign[0].option]||0;
+    out[6] = {'catch':1,delay:2}[statement.assign[0].option]||0;
+    return [out];
+  }else{
+    if(!context.modules[statement.module]){
+      error('Module not found',statement);
+    }
+    if(context.modules[statement.module].inputs.length !== statement.args.length){
+      error('Number of inputs wrong',statement);
+    }
+    if(context.modules[statement.module].outputs.length !== statement.assign.length){
+      error('Number of inputs wrong',statement);
+    }
+  }
+}
+
+function codegenBlock(block,context){
+  var out = [];
+  for(var i = 0; i < block.length; i++){
+    out = out.concat(codegenStatement(block[i],context)||[]);
+  }
+  return out;
+}
+function codegenModule(module,args,out,context){
+  var pipes = {}, constants = {};
+  for(var i = 0; i < args.length; i++){
+    if(module.inputs[i].size){
+      var tmp = constants[module.inputs[i].size] = context.eval(args[i].size);
+      for(var k = 0; k < tmp; k++){
+        context.remap(args[i].name+'['+k+']',module.inputs[i].name+'['+k+']',pipes);
+      }
+    }else{
+      context.remap(args[i].name,module.inputs[i].name+'[0]',pipes);
+    }
+  }
+  for(var i = 0; i < out.length; i++){
+    if(module.outputs[i].size){
+      var t = context.lookup(out[i]).replace(']').split('[');
+      var name = t[0];
+      var tmp = constants[module.outputs[i].size] = parseInt(t[1]);
+      
+      for(var k = 0; k < tmp; k++){
+        context.remap(name+'['+k+']',module.outputs[i].name+'['+k+']',pipes);
+      }
+    }else{
+      context.remap(out[i],module.outputs[i].name+'[0]',pipes);
+    }
+  }
+  var savPipes = context.pipeMap, savConst = context.constants,savLinks = context.linkMap;
+  context.save(pipes, constants);
+  var code = codegenBlock(module.body,context);
+  //context.restore();
+  return code;
+  
+}
+var context = { pipes: 0, links: 0, pipeMap:{}, pipeRead: [], linkMap:{}, constants: {}, stack:[],
+                newLink: function(){
+                  return context.links++;
+                },
+                setLink: function(name,value){
+                  context.linkMap[context.lookup(name)] = value;
+                },
+                getLink: function(name){
+                  return context.linkMap[context.lookup(name)];
+                },
+                getPipe: function(name,read){
+                  if(name === '_'){
+                    return 0;
+                  }
+                  var name = context.lookup(name);
+                  if(context.pipeMap[name]){
+                    if(context.pipeRead[context.pipeMap[name]]){
+                      error('Cannot access pipe: '+name +' already read from');
+                    }
+                    if(read && context.pipeMap[name] !== 0){
+                      context.pipeRead[context.pipeMap[name]] = true;
+                    }
+                    return context.pipeMap[name];
+                  }else{
+                    if(read){
+                      error('Cannot access pipe: '+name +' not created yet');
+                    }
+                    context.pipeMap[name] = ++context.pipes;
+                    return context.pipes
+                  }
+                },
+                lookup: function(name){
+                  var parts = name.replace(']','').split('[');
+                  if(parts.length > 2){
+                    error('Name has multiple [\'s',name)
+                  }
+                  name = parts[0];
+                  var index = 0;
+                  if(parts.length === 2){
+                    index = context.eval(parts[1]);
+                  }
+                  
+                  return name + '[' + index + ']';
+                },
+                eval: function(str){
+                  var str = str.split(/(\+|-)/);
+                  var val = 0;
+                  for(var i = 0; i < str.length; i+=2){
+                    if(str[i] === ''){ // for a[-N]
+                      continue;
+                    }
+                    if(context.constants[str[i]] !== undefined){
+                      val += context.constants[str[i]]*((str[i-1] === '-')?-1:1);
+                    }else{
+                      val += parseInt(str[i])*((str[i-1] === '-')?-1:1);
+                    }
+                  }
+                  return val;
+                },
+                remap:function(name,newName,map){
+                  map[newName] = context.getPipe(name);
+                },
+                save:function(pipes,consts){
+                  context.stack.push(context.pipeMap);
+                  context.stack.push(context.linkMap);
+                  context.stack.push(context.constants);
+                  
+                  context.pipeMap = pipes;
+                  context.linkMap = [];
+                  context.constants = consts;
+                },
+                restore:function(){
+                  context.constants = context.stack.pop();
+                  context.linkMap = context.stack.pop();
+                  context.pipeMap = context.stack.pop();
+                }
+}
