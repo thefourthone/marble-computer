@@ -2,7 +2,7 @@ function getToken(){
   var lastChar = input.getChar();
   
   //whitespace
-  while(!!lastChar.match(/\s/)){
+  while(lastChar && !!lastChar.match(/\s/)){
     lastChar = input.getChar();
   }
   
@@ -97,10 +97,17 @@ function error(str,tok){
 }
 function parseTopLevel(){
   var tok = getToken();
-  if(tok.token === 'module'){
-    return parseModule();
-  }else
-    error('Only module definitions are allowed on the top level',tok);
+  var modules = {};
+  while(tok.token === 'module'){
+    tmp = parseModule();
+    modules[tmp.name] = tmp;
+    tok = getToken();
+  }
+  if(tok.token !== 'EOF'){
+    error('Unexpected token expected EOF or module',tok);
+  }
+  return modules;
+  
 }
 
 function parseModule(){
@@ -258,7 +265,7 @@ function parseBlock(){
   return statements;
 }
 
-var input = {src:"adder (in[N],read) (out[N], clk) {rst, t = dup(read);       // need 3 ouputs from read, 2 for toggling the output latch twice, and one for clk\n  rst, clk = dup(t); // delay clk so ouput has time to settle\n  \n  latch = link(); // makes output go to out or null\n  reset = linkt();    // releases stored marbles\n  _, _ = flip(rst,latch,reset);\n  \n  for i = 0 to N {\n    in[i+1], tmp[i] = flip(in[i],reset); // adder circuitry\n    _, out[i] = switch(tmp[i],latch);           // output latch\n  }\n}",
+var input = {src:"module adder (in[N],read) (out[N], clk){\n  rst, t = dup(read);       // need 3 ouputs from read, 2 for toggling the output latch twice, and one for clk\n  rst, delay(clk) = dup(t); // delay clk so ouput has time to settle\n  \n  latch = link(); // makes output go to out or null\n  reset = linkt();    // releases stored marbles\n  \n  _, _ = flip(rst,latch,reset);\n  for i=0 to N {\n    in[i+1], catch(tmp[i]) = flip(in[i],reset); // adder circuitry\n    _, out[i] = switch(tmp[i],latch);           // output latch\n  }\n}\nmodule main (in[4],t)(out[4],g){\n  out[4], g = adder(in[4],t);\n}",
              i: 0,
              getIndex: function(){return input.i;},
              getChar: function(){return input.src[input.i++];},
@@ -300,6 +307,7 @@ function codegenStatement(statement,context){
     }
     var links = [];
     for(var i = 1; i < statement.args.length; i++){
+      console.log(i,statement.args[i],statement.args);
       var name = statement.args[i].name;
       if(statement.args[i].size){
         name += '['+statement.args[i].size+']';
@@ -327,8 +335,9 @@ function codegenStatement(statement,context){
       error('Number of inputs wrong',statement);
     }
     if(context.modules[statement.module].outputs.length !== statement.assign.length){
-      error('Number of inputs wrong',statement);
+      error('Number of outputs wrong',statement);
     }
+    return codegenModule(context.modules[statement.module],statement.args,statement.assign,context);
   }
 }
 
@@ -353,23 +362,52 @@ function codegenModule(module,args,out,context){
   }
   for(var i = 0; i < out.length; i++){
     if(module.outputs[i].size){
-      var t = context.lookup(out[i]).replace(']').split('[');
+      var t = context.lookup(out[i].name).replace(']').split('[');
       var name = t[0];
-      var tmp = constants[module.outputs[i].size] = parseInt(t[1]);
+      var tmp = constants[module.outputs[i].size] = context.eval(t[1]);
       
       for(var k = 0; k < tmp; k++){
         context.remap(name+'['+k+']',module.outputs[i].name+'['+k+']',pipes);
       }
     }else{
-      context.remap(out[i],module.outputs[i].name+'[0]',pipes);
+      context.remap(out[i].name,module.outputs[i].name+'[0]',pipes);
     }
   }
   var savPipes = context.pipeMap, savConst = context.constants,savLinks = context.linkMap;
   context.save(pipes, constants);
   var code = codegenBlock(module.body,context);
-  //context.restore();
+  context.restore();
   return code;
   
+}
+
+function codegen(modules,context){
+  if(!modules.main){
+    error('Must have a main module');
+  }
+  context.modules = modules;
+  var main = modules.main;
+  for(var i = 0; i < main.inputs.length; i++){
+    if(main.inputs[i].size){
+      var tmp = parseInt(main.inputs[i].size);
+      for(var k = 0; k < tmp; k++){
+        context.getPipe(main.inputs[i].name+'['+k+']');
+      }
+    }else{
+      context.getPipe(main.inputs[i].name+'[0]');
+    }
+  }
+  for(var i = 0; i < main.outputs.length; i++){
+    if(main.outputs[i].size){
+      var tmp = parseInt(main.outputs[i].size);
+      for(var k = 0; k < tmp; k++){
+        context.getPipe(main.outputs[i].name+'['+k+']');
+      }
+    }else{
+      context.getPipe(main.outputs[i].name+'[0]');
+    }
+  }
+  return codegenBlock(main.body,context);
 }
 var context = { pipes: 0, links: 0, pipeMap:{}, pipeRead: [], linkMap:{}, constants: {}, stack:[],
                 newLink: function(){
