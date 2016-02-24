@@ -8,12 +8,11 @@
   - `a,b = dup(c)` duplicates the marble on c into two marbles going on a and b
   - `catch(a),delay(b) = flip(c)` corresponds to PICTURE 
   - `_, a = flip(b)` means marbles on the left are ignored / removed from the system
-  - Flips and switches can also be linked using `_, _ = switch(link1&link2,in)`
+  - Flips and switches can also be linked using `_, _ = switch(in,link1,link2)`
   
 ## Modules
   - Modules are defined by `module name (input) (output){ code }`
   - Modules can ony take pipes as inputs and outputs
-  - after a module is defined it can be used in another using `output`
 
 ## Vectors
   - Vectors are simply a convienient way to write out repetive sections. **THEY ARE EQUIVILENT TO WRITING IT OUT**
@@ -21,6 +20,7 @@
     - Accessing a vector pipe without defining it first is fine.
   - Vector links can also be made
   - for loops are made using the syntax `for index = start to end { code }` where start and end are numbers, Sizes of vectors, or a combination of two (using addition and subtraction)
-  - Duplication for vectors is also possible using `name[N] = dup[N](a)`
-  - Vectors can be composed of existing pipes using `{a,b,c,d,e[N]}`
-    - Mainly useful for module arguments
+  - **NOT IMPLEMENTED**
+    - Duplication for vectors is also possible using `name[N] = dup[N](a)`
+    - Vectors can be composed of existing pipes using `{a,b,c,d,e[N]}`
+      - Mainly useful for module arguments
