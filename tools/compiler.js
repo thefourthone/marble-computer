@@ -106,7 +106,6 @@ function error(str,tok){
 function parseTopLevel(input){
   var tok = getToken(input);
   var modules = {};
-  console.log(tok);
   while(tok.token === 'module'){
     tmp = parseModule(input);
     modules[tmp.name] = tmp;
@@ -393,14 +392,15 @@ function codegen(modules,context){
   }
   context.modules = modules;
   var main = modules.main;
+  var inputs = [];
   for(var i = 0; i < main.inputs.length; i++){
     if(main.inputs[i].size){
       var tmp = parseInt(main.inputs[i].size);
       for(var k = 0; k < tmp; k++){
-        context.getPipe(main.inputs[i].name+'['+k+']');
+        inputs.push(context.getPipe(main.inputs[i].name+'['+k+']'));
       }
     }else{
-      context.getPipe(main.inputs[i].name+'[0]');
+      inputs.push(context.getPipe(main.inputs[i].name+'[0]'));
     }
   }
   for(var i = 0; i < main.outputs.length; i++){
@@ -413,7 +413,7 @@ function codegen(modules,context){
       context.getPipe(main.outputs[i].name+'[0]');
     }
   }
-  return codegenBlock(main.body,context);
+  return {pipes:context.pipes, links: context.links, inputs: inputs, insts:codegenBlock(main.body,context)};
 }
 function makeContext(){
   var out = { pipes: 0, links: 0, pipeMap:{}, pipeRead: [], linkMap:{}, constants: {}, stack:[]};

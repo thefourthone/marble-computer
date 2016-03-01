@@ -1,5 +1,7 @@
 var program = require('commander');
 var compiler= require('./compiler.js');
+var visualizer = require('./visualizer.js');
+
 var fs = require('fs');
 
 String.prototype.endsWith = function( str ) {
@@ -17,12 +19,13 @@ program
   .version('0.0.1')
   .option('-p, --parser', 'Output parse modules')
   .option('-c, --compiler', 'Output compiled IR')
+  .option('-v, --visualizer', 'Output ascii representation of IR')
   .option('-o, --output <file>', 'Output to file')
   .parse(process.argv);
 
 
-if(program.parser && program.compiler){
-  console.error('Options parser anc compiler cannot be active at the same time.');
+if(program.parser && program.compiler && program.visualizer){
+  console.error('Options parser and compiler cannot be active at the same time.');
   process.exit(1);
 }
 var modules = {};
@@ -45,6 +48,10 @@ if(program.parser){
 var code = compiler.codegen(modules);
 if(program.compiler){
   fs.writeFileSync(program.output || 'a.ir', JSON.stringify(code), 'utf8');
+  process.exit(0);
+}
+if(program.visualizer){
+  fs.writeFileSync(program.output || 'a.txt', visualizer.draw(code), 'utf8');
   process.exit(0);
 }
 console.log('You shouldn\'t see this');
