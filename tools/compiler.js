@@ -1,4 +1,13 @@
-function getToken(){
+exports = exports || {};
+exports.parse = function(str){
+  return parseTopLevel(str2in(str));
+};
+exports.codegen = function(modules){
+  return codegen(modules, makeContext());
+};
+
+
+function getToken(input){
   var lastChar = input.getChar();
   
   //whitespace
@@ -25,9 +34,8 @@ function getToken(){
       return {token:'/',index:input.getIndex()};
     }
     input.returnChar();
-    return getToken();
+    return getToken(input);
   }
-  
   // All single character tokens
   if(!lastChar){
     return {token:'EOF'};
@@ -95,13 +103,14 @@ function getToken(){
 function error(str,tok){
   throw "Parse Error: " + str + '; ' + (JSON.stringify(tok)||'');
 }
-function parseTopLevel(){
-  var tok = getToken();
+function parseTopLevel(input){
+  var tok = getToken(input);
   var modules = {};
+  console.log(tok);
   while(tok.token === 'module'){
-    tmp = parseModule();
+    tmp = parseModule(input);
     modules[tmp.name] = tmp;
-    tok = getToken();
+    tok = getToken(input);
   }
   if(tok.token !== 'EOF'){
     error('Unexpected token expected EOF or module',tok);
@@ -110,21 +119,21 @@ function parseTopLevel(){
   
 }
 
-function parseModule(){
-  var name = getToken();
+function parseModule(input){
+  var name = getToken(input);
   if(name.token !== 'other'){
     error('First token in module must be a name',name);
   }
   name = name.data;
-  return {name:name,inputs:parseArgs(), outputs:parseArgs(),body:parseBlock()};
+  return {name:name,inputs:parseArgs(input), outputs:parseArgs(input),body:parseBlock(input)};
 }
 
-function parseArgs(){
-  var tmp,inputs = [],tok = getToken();
+function parseArgs(input){
+  var tmp,inputs = [],tok = getToken(input);
   if(tok.token !==  '('){
     error('Args starts with (',tok);
   }
-  tok = getToken();
+  tok = getToken(input);
   while(tok.token !== ')' && tok.token !== 'EOF'){
     if(!tmp){
       if(tok.token !== 'other'){
@@ -155,7 +164,7 @@ function parseArgs(){
     }else{
       error('unexpected token',tok);
     }
-    tok = getToken();
+    tok = getToken(input);
   }
   if(tmp){
     inputs.push(tmp);
@@ -166,23 +175,23 @@ function parseArgs(){
   return inputs
 }
 
-function parseLH(tok){
+function parseLH(tok,input){
   var tmp = {name: ''},lh = [];
   while(tok.token !== '=' && tok.token !== 'EOF'){
     if(tok.token === 'catch' || tok.token === 'delay'){
       tmp.option = tok.token;
-      tok = getToken();
+      tok = getToken(input);
       if(tok.token !== '('){
         error('Expect (',tok);
       }
-      tok = getToken();
+      tok = getToken(input);
       while(tok.token !== ')' && tok.token !== 'EOF'){
         if(tok.token === '[' || tok.token === ']'){
           tmp.name += tok.token;
         }else if(tok.token === 'other'){
           tmp.name += tok.data;
         }
-        tok = getToken();
+        tok = getToken(input);
       }
       
     }else if(tok.token === '[' || tok.token === ']'){
@@ -197,7 +206,7 @@ function parseLH(tok){
     }else{
       error('unexpected token',tok);
     }
-    tok = getToken();
+    tok = getToken(input);
   }
   if(tmp.name){
     lh.push(tmp);
@@ -208,69 +217,71 @@ function parseLH(tok){
   return lh
 }
 
-function parseBlock(){
-  var tok = getToken();
+function parseBlock(input){
+  var tok = getToken(input);
   if(tok.token !== '{'){
     error('Blocks must start with {',tok);
   }
   var statements = [];
   
-  var tok = getToken();
+  var tok = getToken(input);
   while(tok.token !== '}' && tok.token !== 'EOF'){
     if(tok.token === 'other' || tok.token === '_'){
-      var lh = parseLH(tok);
-      tok = getToken();
+      var lh = parseLH(tok,input);
+      tok = getToken(input);
       if(tok.token !== 'other'){
         error('Expected identifier on Right side of =',tok);
       }
       var module = tok.data;
-      var inputs = parseArgs();
-      tok = getToken();
+      var inputs = parseArgs(input);
+      tok = getToken(input);
       if(tok.token !== ';'){
         error('Expected ; at end of statement',tok);
       }
       
       statements.push({type:'statement',module:module,args:inputs,assign:lh});
     }else if(tok.token === 'for'){
-      var name = getToken();
+      var name = getToken(input);
       if(name.token !== 'other'){
         error("Expected identifier for index",name);
       }
       name = name.data;
-      tok = getToken();
+      tok = getToken(input);
       if(tok.token !== '='){
         error("Expected =",tok);
       }
-      var lb = getToken();
+      var lb = getToken(input);
       if(lb.token !== 'other'){
         error("Expected identifier",lb);
       }
-      tok = getToken();
+      tok = getToken(input);
       if(tok.token !== 'to'){
         error("Expected to",tok);
       }
-      var ub = getToken();
+      var ub = getToken(input);
       if(ub.token !== 'other'){
         error("Expected identifier",ub);
       }
-      statements.push({type:'for',index:name,lowerBound:lb,upperBound:ub,block:parseBlock()});
+      statements.push({type:'for',index:name,lowerBound:lb,upperBound:ub,block:parseBlock(input)});
     }else{
       error("Expected for or identifier at start of statement",tok);
     }
-    tok = getToken();
+    tok = getToken(input);
   }
   if(tok.token === 'EOF'){
     error('Unexpected eof');
   }
   return statements;
 }
-
-var input = {src:"module adder (in[N],read) (out[N], clk){\n  rst, t = dup(read);       // need 3 ouputs from read, 2 for toggling the output latch twice, and one for clk\n  rst, delay(clk) = dup(t); // delay clk so ouput has time to settle\n  \n  latch = link(); // makes output go to out or null\n  reset = linkt();    // releases stored marbles\n  \n  _, _ = flip(rst,latch,reset);\n  for i=0 to N {\n    in[i+1], catch(tmp[i]) = flip(in[i],reset); // adder circuitry\n    _, out[i] = switch(tmp[i],latch);           // output latch\n  }\n}\nmodule main (in[4],t)(out[4],g){\n  out[4], g = adder(in[4],t);\n}",
+function str2in(str){
+  var out = {src:str,
              i: 0,
-             getIndex: function(){return input.i;},
-             getChar: function(){return input.src[input.i++];},
-             returnChar: function(){input.i--;}
+             getIndex: function(){return this.i;},
+             getChar: function(){return this.src[this.i++];},
+             returnChar: function(){this.i--;}
             };
+  return out;
+}
 
 function codegenStatement(statement,context){
   if(statement.type === 'for'){
@@ -280,9 +291,7 @@ function codegenStatement(statement,context){
     var lb = context.eval(statement.lowerBound.data);
     var ub = context.eval(statement.upperBound.data);
     var out = [];
-    console.log(lb,ub)
     for(var i = lb; i < ub; i++){
-      console.log(i,statement.block);
       context.constants[statement.index] = i;
       out = out.concat(codegenBlock(statement.block,context));
     }
@@ -300,14 +309,11 @@ function codegenStatement(statement,context){
     }
     context.setLink(statement.assign[0].name, context.newLink());
   }else if(statement.module === 'dup' || statement.module === 'flip' || statement.module === 'switch'){
-    
-    console.log(statement);
     if(statement.assign.length !== 2){
       error('fundemental modules require 2 and only 2 ouput',statement);
     }
     var links = [];
     for(var i = 1; i < statement.args.length; i++){
-      console.log(i,statement.args[i],statement.args);
       var name = statement.args[i].name;
       if(statement.args[i].size){
         name += '['+statement.args[i].size+']';
@@ -409,80 +415,82 @@ function codegen(modules,context){
   }
   return codegenBlock(main.body,context);
 }
-var context = { pipes: 0, links: 0, pipeMap:{}, pipeRead: [], linkMap:{}, constants: {}, stack:[],
-                newLink: function(){
-                  return context.links++;
-                },
-                setLink: function(name,value){
-                  context.linkMap[context.lookup(name)] = value;
-                },
-                getLink: function(name){
-                  return context.linkMap[context.lookup(name)];
-                },
-                getPipe: function(name,read){
-                  if(name === '_'){
-                    return 0;
-                  }
-                  var name = context.lookup(name);
-                  if(context.pipeMap[name]){
-                    if(context.pipeRead[context.pipeMap[name]]){
-                      error('Cannot access pipe: '+name +' already read from');
-                    }
-                    if(read && context.pipeMap[name] !== 0){
-                      context.pipeRead[context.pipeMap[name]] = true;
-                    }
-                    return context.pipeMap[name];
-                  }else{
-                    if(read){
-                      error('Cannot access pipe: '+name +' not created yet');
-                    }
-                    context.pipeMap[name] = ++context.pipes;
-                    return context.pipes
-                  }
-                },
-                lookup: function(name){
-                  var parts = name.replace(']','').split('[');
-                  if(parts.length > 2){
-                    error('Name has multiple [\'s',name)
-                  }
-                  name = parts[0];
-                  var index = 0;
-                  if(parts.length === 2){
-                    index = context.eval(parts[1]);
-                  }
-                  
-                  return name + '[' + index + ']';
-                },
-                eval: function(str){
-                  var str = str.split(/(\+|-)/);
-                  var val = 0;
-                  for(var i = 0; i < str.length; i+=2){
-                    if(str[i] === ''){ // for a[-N]
-                      continue;
-                    }
-                    if(context.constants[str[i]] !== undefined){
-                      val += context.constants[str[i]]*((str[i-1] === '-')?-1:1);
-                    }else{
-                      val += parseInt(str[i])*((str[i-1] === '-')?-1:1);
-                    }
-                  }
-                  return val;
-                },
-                remap:function(name,newName,map){
-                  map[newName] = context.getPipe(name);
-                },
-                save:function(pipes,consts){
-                  context.stack.push(context.pipeMap);
-                  context.stack.push(context.linkMap);
-                  context.stack.push(context.constants);
-                  
-                  context.pipeMap = pipes;
-                  context.linkMap = [];
-                  context.constants = consts;
-                },
-                restore:function(){
-                  context.constants = context.stack.pop();
-                  context.linkMap = context.stack.pop();
-                  context.pipeMap = context.stack.pop();
-                }
+function makeContext(){
+  var out = { pipes: 0, links: 0, pipeMap:{}, pipeRead: [], linkMap:{}, constants: {}, stack:[]};
+    out.newLink = function(){
+      return this.links++;
+    };
+    out.setLink = function(name,value){
+      this.linkMap[this.lookup(name)] = value;
+    };
+    out.getLink = function(name){
+      return this.linkMap[this.lookup(name)];
+    };
+    out.getPipe = function(name,read){
+      if(name === '_'){
+        return 0;
+      }
+      var name = this.lookup(name);
+      if(this.pipeMap[name]){
+        if(this.pipeRead[this.pipeMap[name]]){
+          error('Cannot access pipe: '+name +' already read from');
+        }
+        if(read && this.pipeMap[name] !== 0){
+          this.pipeRead[this.pipeMap[name]] = true;
+        }
+        return this.pipeMap[name];
+      }else{
+        if(read){
+          error('Cannot access pipe: '+name +' not created yet');
+        }
+        this.pipeMap[name] = ++this.pipes;
+        return this.pipes
+      }
+    };
+    out.lookup = function(name){
+      var parts = name.replace(']','').split('[');
+      if(parts.length > 2){
+        error('Name has multiple [\'s',name)
+      }
+      name = parts[0];
+      var index = 0;
+      if(parts.length === 2){
+        index = this.eval(parts[1]);
+      }
+      
+      return name + '[' + index + ']';
+    };
+    out.eval = function(str){
+      var str = str.split(/(\+|-)/);
+      var val = 0;
+      for(var i = 0; i < str.length; i+=2){
+        if(str[i] === ''){ // for a[-N]
+          continue;
+        }
+        if(this.constants[str[i]] !== undefined){
+          val += this.constants[str[i]]*((str[i-1] === '-')?-1:1);
+        }else{
+          val += parseInt(str[i])*((str[i-1] === '-')?-1:1);
+        }
+      }
+      return val;
+    };
+    out.remap = function(name,newName,map){
+      map[newName] = this.getPipe(name);
+    };
+    out.save = function(pipes,consts){
+      this.stack.push(this.pipeMap);
+      this.stack.push(this.linkMap);
+      this.stack.push(this.constants);
+      
+      this.pipeMap = pipes;
+      this.linkMap = [];
+      this.constants = consts;
+    };
+    out.restore = function(){
+      this.constants = this.stack.pop();
+      this.linkMap = this.stack.pop();
+      this.pipeMap = this.stack.pop();
+    };
+    return out;
 }

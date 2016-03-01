@@ -1,0 +1,18 @@
+module adder (in[N],read) (out[N], clk){
+  rst, t = dup(read);       // need 3 ouputs from read, 2 for toggling the output latch twice, and one for clk
+  rst, delay(clk) = dup(t); // delay clk so ouput has time to settle
+
+  latch = link(); // makes output go to out or null
+  reset = linkt();    // releases stored marbles
+  
+  _, _ = flip(rst,latch,reset);
+  
+  for i = 0 to N {
+    in[i+1], catch(tmp[i]) = flip(in[i],reset); // adder circuitry
+    _, out[i] = switch(tmp[i],latch);           // output latch
+  }
+}
+
+module main (in[4],t)(out[4],g){
+  out[4], g = adder(in[4],t);
+}
