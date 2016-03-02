@@ -12,6 +12,7 @@ function draw(inputs, insts){
   for(var i = 0; i < inputs.length; i++){
     written[inputs[i]]=true;
   }
+  fill(written);
   out += written.map(function(a){return a?'|':' '}).join('')+'\n';
   for(i = 0; i < insts.length; i++){
     tmp = written.map(function(a){return a?'|':' '});

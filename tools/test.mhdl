@@ -3,12 +3,12 @@ module adder (in[N],read) (out[N], clk){
   rst, delay(clk) = dup(t); // delay clk so ouput has time to settle
 
   latch = link(); // makes output go to out or null
-  reset = linkt();    // releases stored marbles
+      // releases stored marbles
   
-  _, _ = flip(rst,latch,reset);
+  _, _ = flip(rst,latch);
   
   for i = 0 to N {
-    in[i+1], catch(tmp[i]) = flip(in[i],reset); // adder circuitry
+    in[i+1], catch(tmp[i]) = flip(in[i],:latch); // adder circuitry
     _, out[i] = switch(tmp[i],latch);           // output latch
   }
 }

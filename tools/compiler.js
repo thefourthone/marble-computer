@@ -296,33 +296,38 @@ function codegenStatement(statement,context){
     }
     delete context.constants[statement.index];
     return out;
-  }else if(statement.module === 'link' || statement.module === 'linkt'){
+  }else if(statement.module === 'link'){
     if(statement.assign.length !== 1){
       error('links require 1 and only 1 ouput',statement);
+    }
+
+    if(context.links[statement.assign[0]]){
+      error('cannot assign link to existing variable',statement);
     }
     if(statement.args.length !== 0){
       error('links require 0 args',statement);
     }
-    if(context.links[statement.assign[0]]){
-      error('cannot assign link to existing variable',statement);
-    }
-    context.setLink(statement.assign[0].name, context.newLink());
+    context.getLink(statement.assign[0].name+'['+(statement.assign[0].size||0)+']');
   }else if(statement.module === 'dup' || statement.module === 'flip' || statement.module === 'switch'){
     if(statement.assign.length !== 2){
       error('fundemental modules require 2 and only 2 ouput',statement);
     }
     var links = [];
     for(var i = 1; i < statement.args.length; i++){
-      var name = statement.args[i].name;
-      if(statement.args[i].size){
-        name += '['+statement.args[i].size+']';
+      var name = statement.args[i].name.split(/(-|:)/);
+      var rst = false, neg = false;
+      for(var k = 1; k < name.length; k+=2){
+        if(name[i] == ':'){
+          rst = true;
+        }
+        if(name[i] == '-'){
+          neg = true;
+        }
       }
-      links.push(context.getLink(name));
+      name = name[name.length-1];
+      links.push((neg?'-':'') + (rst?':':'')+context.getLink(name+'['+(statement.args[i].size||0)+']'));
     }
-    name = statement.args[0].name
-    if(statement.args[0].size){
-      name += '['+statement.args[0].size+']';
-    }
+    name = statement.args[0].name+'['+(statement.args[0].size||0)+']';
     var out = [];
     out[0] = {dup:'D',flip:'F','switch':'S'}[statement.module];
     out[1] = context.getPipe(name,true);
@@ -330,7 +335,7 @@ function codegenStatement(statement,context){
     out[3] = context.getPipe(statement.assign[1].name);
     out[4] = links;
     out[5] = {'catch':1,delay:2}[statement.assign[0].option]||0;
-    out[6] = {'catch':1,delay:2}[statement.assign[0].option]||0;
+    out[6] = {'catch':1,delay:2}[statement.assign[1].option]||0;
     return [out];
   }else{
     if(!context.modules[statement.module]){
@@ -417,14 +422,15 @@ function codegen(modules,context){
 }
 function makeContext(){
   var out = { pipes: 0, links: 0, pipeMap:{}, pipeRead: [], linkMap:{}, constants: {}, stack:[]};
-    out.newLink = function(){
-      return this.links++;
-    };
-    out.setLink = function(name,value){
-      this.linkMap[this.lookup(name)] = value;
-    };
     out.getLink = function(name){
-      return this.linkMap[this.lookup(name)];
+      console.log(name);
+      var name = this.lookup(name);
+      if(this.linkMap[name]){
+        return this.linkMap[name];
+      }else{
+        this.linkMap[name] = ++this.links;
+        return this.links;
+      }
     };
     out.getPipe = function(name,read){
       if(name === '_'){
