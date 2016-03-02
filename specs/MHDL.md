@@ -3,12 +3,14 @@
   - Pipes are transfers for marbles. They can only be inputted into until they are read form and can only be read from once.
   - `a,b = flip(c)` this corresponds to PICTURE HERE
   - `a,b = swith(c)` similarly corresponds to above
-  - `a = link()` allocates a static link to be used later
-  - `a = linkt()` allocates a reset link to be used later
-  - `a,b = dup(c)` duplicates the marble on c into two marbles going on a and b
-  - `catch(a),delay(b) = flip(c)` corresponds to PICTURE 
-  - `_, a = flip(b)` means marbles on the left are ignored / removed from the system
   - Flips and switches can also be linked using `_, _ = switch(in,link1,link2)`
+  - Links as arguments to switches can be given optional parameters `-` (reverse direction) and `:` (reset) to modifiy behavior
+    - Example `_, _ = switch(in,-:link1)`
+  - `a = link()` allocates a static link to be used later
+  - `a,b = dup(c)` duplicates the marble on c into two marbles going on a and b
+  - `catch(a),delay(b) = flip(c)` corresponds to PICTURE
+  - `_, a = flip(b)` means marbles on the left are ignored / removed from the system
+  - Comments are made using `//`
   
 ## Modules
   - Modules are defined by `module name (input) (output){ code }`
