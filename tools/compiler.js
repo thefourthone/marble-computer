@@ -408,17 +408,18 @@ function codegen(modules,context){
       inputs.push(context.getPipe(main.inputs[i].name+'[0]'));
     }
   }
+  var outputs = [];
   for(var i = 0; i < main.outputs.length; i++){
     if(main.outputs[i].size){
       var tmp = parseInt(main.outputs[i].size);
       for(var k = 0; k < tmp; k++){
-        context.getPipe(main.outputs[i].name+'['+k+']');
+        outputs.push(context.getPipe(main.outputs[i].name+'['+k+']'));
       }
     }else{
-      context.getPipe(main.outputs[i].name+'[0]');
+      outputs.push(context.getPipe(main.outputs[i].name+'[0]'));
     }
   }
-  return {pipes:context.pipes, links: context.links, inputs: inputs, insts:codegenBlock(main.body,context)};
+  return {pipes:context.pipes, links: context.links, inputs: inputs, outputs:outputs, insts:codegenBlock(main.body,context)};
 }
 function makeContext(){
   var out = { pipes: 0, links: 0, pipeMap:{}, pipeRead: [], linkMap:{}, constants: {}, stack:[]};

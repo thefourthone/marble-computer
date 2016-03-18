@@ -2,6 +2,8 @@ var program = require('commander');
 var compiler= require('./compiler.js');
 var visualizer = require('./visualizer.js');
 
+var adjust = require('./adjust.js');
+
 var fs = require('fs');
 
 String.prototype.endsWith = function( str ) {
@@ -51,7 +53,7 @@ if(program.compiler){
   process.exit(0);
 }
 if(program.visualizer){
-  fs.writeFileSync(program.output || 'a.txt', visualizer.draw(code), 'utf8');
+  fs.writeFileSync(program.output || 'a.txt', visualizer.draw(adjust.adjust(code)), 'utf8');
   process.exit(0);
 }
 console.log('You shouldn\'t see this');
